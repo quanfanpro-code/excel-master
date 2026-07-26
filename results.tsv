@@ -1,0 +1,6 @@
+﻿timestamp	commit	skill	old_score	new_score	status	dimension	note	eval_mode
+2026-07-26T11:38	local-no-commit	excel-master	-	73.6	baseline	-	raw_max=99; normalized=74.3/100; d1=10,d2=7,d3=5,d4=3,d5=8,d6=10,d7=8,d8=8,d9=8; runtime_warn=0; baseline与带技能均完成真实输出，带技能在显式区块、列宽打码和验证清单上更稳，但仍暴露前导零、隐藏Excel残留、中间未打码图和单窗格限制	full_test
+2026-07-26T11:47	local-no-commit	excel-master	73.6	85.5	keep	workflow-fallback	raw_max=99; normalized=86.4/100; d1=10,d2=9,d3=9,d4=8,d5=9,d6=10,d7=8,d8=8,d9=8; 六步工作流、三道停止门和三段式失败表通过静态与真实任务复核	full_test
+2026-07-26T11:52	local-no-commit	excel-master	85.5	91.4	keep	blacklist-architecture	raw_max=99; normalized=92.3/100; d1=10,d2=9,d3=10,d4=9,d5=10,d6=10,d7=9,d8=8,d9=10; 历史Pitfalls压缩为十条红线，体积较Round1下降11.6%，两名独立盲评均偏好新版	full_test
+2026-07-26T12:22	local-no-commit	excel-master	91.4	95.31	keep	runtime-self-contained	raw_max=99; normalized=96.3/100; d1=10,d2=9,d3=10,d4=9,d5=10,d6=10,d7=9,d8=9.7,d9=10; 20项测试通过，截图进程自动退出，打码移除第二个Excel实例，同工作表同范围和PNG覆盖备份均有实证，runtime_warn=0	full_test
+2026-07-26T13:07	local-no-commit	excel-master	95.31	95.31	remove	yagni-scope	用户确认图片分支无实际价值；运行脚本、活动说明、专用测试和可选依赖已移除，历史审计保留；12项保留功能测试及生成、美化、双区块真实样例通过	full_test

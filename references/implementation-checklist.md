@@ -1,4 +1,4 @@
-# 实施前扫码清单
+﻿# 实施前扫码清单
 
 在调用 `make_excel` 或 `beautify` 之前，确认以下事项。
 
@@ -6,13 +6,16 @@
 
 - [ ] 数据来源：DataFrame / CSV / 已有 xlsx
 - [ ] 如果输入是已有 xlsx（可能含公式）→ **必须用 beautify**，不是 make_excel
-- [ ] 输出路径：最终产物放 D:\\hermes_files\\YYYY-MM-DD\\，临时测试放 Desktop
+- [ ] 文件路径：通过 Windows 文件选择窗口取得，不要求用户手工输入绝对路径
+- [ ] 修改已有文件前：备份到 `C:\Users\<用户名>\BackUp\excel-master_时间戳\` 并核对 SHA256
 - [ ] 列类型推断是否需要手动覆盖（col_types 参数）
-- [ ] beautify 原地覆盖是否需要关闭自动备份（backup=False）
+- [ ] beautify 原地覆盖必须保持自动备份，不得传 `backup=False`
+- [ ] 表头冻结行数是否需要用 `freeze_rows` 明确指定；0 表示取消冻结
+- [ ] 是否明确要求条件格式跟随主题；未要求时保持默认关闭
 
 ## 验证清单（交付前逐项检查）
 
-用以下代码遍历所有单元格核验。这是用户（本义）要求的级别——他逐格检查 A1 是否空白、每个单元格边框/颜色/数字格式是否正确。不能只目测说"看起来可以"。
+默认水蓝主题可用以下代码遍历所有单元格核验。其他主题应把颜色断言替换为 `THEMES[theme]` 中的对应值。不能只目测说"看起来可以"。
 
 ```python
 from openpyxl import load_workbook
@@ -66,7 +69,7 @@ for r in range(2, ws.max_row + 1):
         assert cell.font.name == 'Arial', f'R{r}C{c} font应为Arial'
         assert cell.font.size == 11, f'R{r}C{c} size应为11'
 
-# 6. 数字列颜色：make_excel 全蓝；beautify 值=蓝 公式=黑
+# 6. 默认主题数字列颜色：值=经典蓝，公式=黑
 def _infer_num_col(hdr):
     n = str(hdr or '').lower()
     return bool(re.search(r'(金额|价格|收入|成本|费用|毛利|净利|合计|总额|单价|预算|率$|占比)', n))
@@ -89,6 +92,21 @@ assert ws.sheet_view.showGridLines == False
 print('✅ 格式验证全部通过')
 ```
 
+## 自包含回归检查
+
+在 skill 根目录运行：
+
+```bash
+python -X utf8 -B -m unittest discover -s tests -v
+python -X utf8 -B C:\Users\<用户名>\.codex\skills\.system\skill-creator\scripts\quick_validate.py .
+```
+
+还要实际生成并重新打开至少三个样本：
+
+1. `make_excel`：含金额、百分比、日期、文本和公式。
+2. `beautify`：验证公式和值前后完全一致。
+3. `format_excel_sections`：至少两个不重叠区块。
+
 ## 常见问题快速排查
 
 | 症状 | 原因 | 修复 |
@@ -101,3 +119,5 @@ print('✅ 格式验证全部通过')
 | A1 有值 | beautify 保留 A 列数据 | 正常现象，不处理 |
 | 数字颜色不对 | font 设了 DATA_FONT 但被后续覆盖 | 检查 _apply_styles 中 font 赋值顺序 |
 | 边框验证失败 | beautify 的合计行 bottom=medium 位置可能偏移 | 检查 data_end 是否准确对应合计行 |
+| `freeze_rows=0` 仍冻结 | 旧冻结窗格未显式清空 | 检查输出的 `freeze_panes is None` |
+| 条件格式颜色被意外改变 | 错误启用了主题适配 | 默认保持关闭，仅明确要求时传 `adapt_conditional_formatting=True` |

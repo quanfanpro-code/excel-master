@@ -1,4 +1,4 @@
-# openpyxl 条件格式 — 颜色阶 / 数据条 / 图标集
+﻿# openpyxl 条件格式 — 颜色阶 / 数据条 / 图标集
 
 ## 适用场景
 
@@ -121,34 +121,36 @@ ws.conditional_formatting.add(
 5. **排除合计列的重要性** — 这是最常见的坑。合计值往往是日期的 N 倍，如果参与色阶，所有日期列都变成浅绿（无区分度）。必须在构造 range 时手动截断合计列。
 6. **冻品窗格 vs 条件格式** — 条件格式范围里包含冻结窗格起始行没关系，但不要用条件格式给冻品行（表头）上色——用 PatternFill 在写表头时直接设，条件格式只用于数据区域。
 
-## 主题色搭配的条件格式（色阶跟随配色）
+## 主题色搭配的条件格式（显式选择）
 
-当工作簿应用不同配色主题（水蓝/深海蓝/墨玉绿/陨石灰蓝/勃艮第红/珊瑚橙）时，条件格式的色阶终点颜色应**跟随主题色**，而不是全部用绿色。
-
-```
-主题      表头色    色阶终点
-水蓝      #4472C4   #4472C4
-深海蓝    #1F4E79   #1F4E79
-墨玉绿    #375623   #375623
-陨石灰蓝  #404040   #404040
-勃艮第红  #843C0C   #843C0C
-珊瑚橙    #D84B4B   #D84B4B
-```
-
-实现模式：先在 openpyxl 中修改表头/合计行的 PatternFill 颜色，然后删掉旧的 CF 规则，用匹配的主题色新建 ColorScaleRule：
+条件格式经常表达业务含义，例如绿色代表良好、红色代表异常。`beautify()` 默认不改变已有条件格式。只有用户明确要求视觉配色跟随主题时，才传入：
 
 ```python
-from openpyxl.formatting.rule import ColorScaleRule
-
-# 清除旧规则
-ws.conditional_formatting._cf_rules.clear()
-
-# 添加主题匹配的新规则
-ws.conditional_formatting.add(
-    "B4:I4",
-    ColorScaleRule(start_type='min', start_color='FFFFFF',
-                   end_type='max', end_color=theme_hex)
+beautify(
+    "输入.xlsx",
+    "输出.xlsx",
+    theme="coral",
+    adapt_conditional_formatting=True,
 )
 ```
 
-注意：`theme_hex` 必须与表头色一致，这样整张表的视觉重心是统一的。旧规则被清理是因为 openpyxl 的 CF 规则是列表追加，不清除的话新旧规则叠加会导致混乱。
+此开关只把 `colorScale` 的最大色改为主题表头色，不修改数据条、图标集和其他规则。
+
+```
+经典商务：default / deep-navy / jade / slate
+暖色高级：burgundy / coral
+青春活力：sakura / warm-sun / lavender / matcha / peach / misty
+```
+
+如果直接使用 openpyxl，安全做法是只原位修改色阶的最后一个颜色，不清空规则集合：
+
+```python
+from openpyxl.styles import Color
+
+for conditional_formatting in ws.conditional_formatting:
+    for rule in conditional_formatting.rules:
+        if rule.type == "colorScale" and rule.colorScale.color:
+            rule.colorScale.color[-1] = Color(rgb=theme_hex)
+```
+
+不要调用私有属性 `_cf_rules.clear()`；它会删除原有业务规则，而且依赖 openpyxl 内部实现。

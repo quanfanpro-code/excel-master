@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
   <img src="skill-card.png" alt="excel-master skill card" width="800">
 </div>
 
@@ -6,19 +6,20 @@
 
 # excel-master
 
-Hermes Agent 技能 —— 从 DataFrame 生成/美化摩根士丹利标准格式的 Excel 报表。
+自包含的 Excel 生成、美化和复杂区块格式化技能。
 
-纯 openpyxl，零 xlwings，一次保存。
+核心写表流程使用纯 openpyxl，一次保存，不依赖其他技能或外部项目目录。
 
 ## 这是什么
 
-一个 Hermes 技能，安装在 `skills/data-science/excel-master/` 下。AI Agent（大天二）在接到「出个 Excel」「美化报表」「导出 xlsx」等指令时，调用 `make_excel.py` 生成符合《为什么精英都是Excel控》九大原则的格式。
+接到「出个 Excel」「美化报表」「导出 xlsx」「格式化复杂表格」等指令时，本目录内的脚本可以独立完成处理。
 
 主要能力：
 
-- **make_excel** — 从 DataFrame 生成摩根系标准格式（B2 起写、水蓝表头、千分位、框线上下粗中间细、隐藏网格线）
+- **make_excel** — 从 DataFrame 生成摩根系标准格式（B1 起写、A列留空、水蓝表头、千分位、框线上下粗中间细、隐藏网格线）
 - **beautify** — 美化已有 xlsx，只改边框/字体/填充/对齐/数字格式/行高/列宽，不碰单元格的值和公式
-- **6 套色系主题** — 表头/合计行/数据字体颜色一键切换
+- **12 套色系主题** — 表头、合计行和数据字体颜色一键切换
+- **复杂区块格式化** — 明确指定多级表头或多数据块范围，不靠不可靠的自动猜测
 
 ## 色系主题
 
@@ -30,28 +31,43 @@ Hermes Agent 技能 —— 从 DataFrame 生成/美化摩根士丹利标准格�
 | `slate` | 陨石灰蓝 `#404040` | 浅灰 `#D9D9D9` |
 | `burgundy` | 勃艮第红 `#843C0C` | 浅杏 `#FCE4D6` |
 | `coral` | 珊瑚橙 `#D84B4B` | 浅粉 `#FDE8E8` |
+| `sakura` | 樱花粉 `#D94F70` | 浅粉 `#FDE8EE` |
+| `warm-sun` | 暖阳橙 `#E8843A` | 浅橙 `#FEF0E6` |
+| `lavender` | 薰衣草紫 `#8B7EC8` | 浅紫 `#EDEAF8` |
+| `matcha` | 抹茶绿 `#7BA23F` | 浅绿 `#F0F5E6` |
+| `peach` | 蜜桃 `#E8897C` | 浅桃 `#FEF0ED` |
+| `misty` | 雾蓝紫 `#6B7FB5` | 浅蓝紫 `#EDF0F8` |
 
 ## 作为独立脚本使用
 
-Hermes 之外的场景也能用这个脚本。环境需要 `pandas` + `openpyxl`：
+核心功能需要 `pandas` + `openpyxl`：
 
 ```bash
-pip install pandas openpyxl
-python make_excel.py 数据.csv 输出.xlsx
-python make_excel.py --beautify 已有报表.xlsx 美化后.xlsx --theme coral
+pip install pandas "openpyxl>=3.0"
+python scripts/make_excel.py 数据.csv 输出.xlsx
+python scripts/make_excel.py --beautify 已有报表.xlsx 美化后.xlsx --theme coral
+python scripts/make_excel.py --beautify 已有报表.xlsx 美化后.xlsx --freeze-rows 3
+python scripts/format_excel_sections.py 复杂表.xlsx 输出.xlsx --section 3:10:2:12
 ```
 
-Python import：
+Python 调用：
 
 ```python
+import sys
+sys.path.insert(0, r'技能目录\scripts')
 from make_excel import make_excel, beautify
 
 # 生成
 make_excel(df, '报表.xlsx', theme='deep-navy')
 
 # 美化已有文件（保留公式）
-beautify('原始表.xlsx', '美化表.xlsx', theme='slate')
+beautify('原始表.xlsx', '美化表.xlsx', theme='slate', freeze_rows=2)
+
+# 条件格式只有明确要求时才跟随主题
+beautify('原始表.xlsx', theme='coral', adapt_conditional_formatting=True)
 ```
+
+原地美化会先把原文件备份到 `C:\Users\<用户名>\BackUp\excel-master_时间戳\` 并校验副本内容；指定另存路径时，若目标已经存在，也先备份目标文件。
 
 ## 摩根系九大原则
 
@@ -59,9 +75,17 @@ beautify('原始表.xlsx', '美化表.xlsx', theme='slate')
 
 ## 更新日志
 
+### 2026-07-26
+- 合并本地版与作者分支的有效能力，主题从6套扩展到12套
+- 修复小数金额误判、A列隐藏或空表头误填色、公式对象列宽和取消冻结问题
+- 条件格式主题适配改为显式选择，默认保留原有业务含义
+- 增加复杂区块格式化和可运行回归测试
+- 按用户实际需求移除真实 Excel 截图、敏感列打码及其可选依赖
+- 移除其他技能、Hermes目录和外部项目路径依赖，形成自包含版本
+
 ### 2026-06-12
 - 修复 beautify 冻结窗格位置错误：freeze_panes 从硬编码 A2 改为跟随表头实际位置
-- 修复 blur-excel-column.py 健壮性：win32com/PIL 改为延迟导入，缺失依赖时友好报错
+- 修复当时的图片敏感列处理脚本；该功能已于 2026-07-26 删除
 - 修复 A 列格式覆盖不全：beautify 和 make_excel 的 A 列数据现在会做类型推断，应用正确的数字格式/对齐/颜色
 - 扩充业务关键词：pct 和 money 类增加返点/佣金/折扣/补贴/commission/discount/rebate 等常用词
 - 扩充合计行关键词：增加 subtotal、汇总

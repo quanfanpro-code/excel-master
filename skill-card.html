@@ -1,19 +1,16 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>excel-master</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Noto+Sans+SC:wght@200;300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{width:100%;height:100%;overflow:hidden}
   body{
     background:#0a0a0a;
     display:flex;justify-content:center;align-items:center;
-    font-family:"Inter","Helvetica Neue","Noto Sans SC","Microsoft YaHei UI",sans-serif;
+    font-family:"Segoe UI","Microsoft YaHei UI",sans-serif;
     -webkit-font-smoothing:antialiased;
   }
 
@@ -26,13 +23,13 @@
     padding:0 6vw;
   }
 
-  /* accent bar */
+  /* 顶部强调线 */
   .slide::before{
     content:'';position:absolute;top:0;left:6vw;right:6vw;height:3px;
     background:#002FA7;
   }
 
-  /* decorative ring */
+  /* 装饰圆环 */
   .ring{
     position:absolute;
     right:-12vw;top:50%;transform:translateY(-50%);
@@ -49,7 +46,7 @@
   }
 
   .tag{
-    font-family:"JetBrains Mono",monospace;
+    font-family:"Cascadia Mono","Consolas",monospace;
     font-size:13px;font-weight:500;
     letter-spacing:.18em;text-transform:uppercase;
     color:#002FA7;
@@ -81,7 +78,7 @@
     bottom:48px;left:6vw;right:6vw;
     display:flex;justify-content:space-between;
     align-items:center;
-    font-family:"JetBrains Mono",monospace;
+    font-family:"Cascadia Mono","Consolas",monospace;
     font-size:12px;font-weight:400;
     color:rgba(250,250,248,.3);
     letter-spacing:.03em;
@@ -99,12 +96,12 @@
 <div class="slide">
   <div class="ring"></div>
   <div class="ring2"></div>
-  <div class="tag">Hermes Agent Skill · data-science</div>
+  <div class="tag">Self-contained Excel Skill · Windows</div>
   <div class="title">excel-<em>master</em></div>
-  <div class="subtitle">摩根士丹利标准格式 Excel 报表生成器 · 6 套色系主题</div>
+  <div class="subtitle">Excel 生成、美化与复杂区块 · 12 套色系主题</div>
   <div class="meta">
-    <span>make_excel / beautify · pure openpyxl</span>
-    <a href="https://github.com/benyichan/excel-master">github.com/benyichan/excel-master</a>
+    <span>make_excel / beautify · self-contained</span>
+    <a href="https://github.com/benyichan/excel-master">upstream · benyichan/excel-master</a>
   </div>
 </div>
 </body>

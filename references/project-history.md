@@ -1,30 +1,33 @@
-# excel-master 项目版本沿革
+﻿# excel-master 版本定位
 
-本文档帮助区分不同位置的 excel-master 版本，避免混淆。
+## 当前唯一运行源
 
-## 版本脉络
+本 `excel-master` 目录是自包含的正式版本。运行时只读取本目录内的：
 
-| 位置 | 角色 | 状态 |
-|------|------|------|
-| `$HERMES_HOME/skills/data-science/excel-master/` | **正式版** — Hermes Agent skill，持续迭代中 | ✅ 当前版本 |
-| `D:\projects\excel-master\` | GitHub 独立仓库（benyichan/excel-master），与 skill 内容对齐 | ✅ 同步版本 |
-| `D:\Trae_project\excel_master\` | 早期试验原型，纯 openpyxl 三文件（core.py+guard.py+\_\_init\_\_.py） | ⛔ 存档（不反映当前能力） |
-| `D:\Trae_project\excel_master_new\` | 重构尝试，仅 .git 目录 | ⛔ 已废弃 |
+- `SKILL.md`
+- `scripts/`
+- `references/`
+- `tests/`
 
-## 判断方法
+不得从 Hermes、旧试验项目、其他 skill 或 GitHub 工作目录导入运行代码。
 
-遇到 `excel_master` 或 `excel-master` 目录时，按以下优先级判断当前版本：
+## 上游关系
 
-1. **Hermes skill**（`$HERMES_HOME/skills/data-science/excel-master/`）— 始终优先
-2. **D:\projects\excel-master** — 独立 GitHub 仓库，与 skill 内容一致
-3. **D:\Trae_project\excel_master** — **早期试验版**，不要引用或依赖其中的代码
+GitHub 的 `benyichan/excel-master` 只作为上游参考。2026-07-26 的本地版采用内容级融合：
 
-## 核心差异
+- 保留本地扩展关键词、截图打码和安全校验；
+- 吸收上游12套主题、冻结行和公式对象处理思路；
+- 修复双方已验证的问题；
+- 不通过普通 Git 合并替换本地文件。
 
-早期试验版（Trae_project）与正式版的主要区别：
+## 识别正式版本
 
-- **架构**：早期是单体模块（core.py + guard.py），正式版是 Hermes skill 结构（SKILL.md + scripts/make_excel.py + references/）
-- **入口**：早期无 CLI，正式版提供 `make_excel.py` 命令行入口和 `beautify` 功能
-- **列宽**：早期版可能依赖 xlwings 自动调整，正式版改用字符估算法（纯 openpyxl 一次保存）
-- **验证**：正式版有完整的 `implementation-checklist.md` 格式验证清单
-- **格式覆盖度**：正式版完整实现了 9 大摩根系原则
+正式目录必须同时满足：
+
+1. 根目录存在合法的 `SKILL.md`；
+2. `scripts/make_excel.py` 可独立导入；
+3. `python -X utf8 -B -m unittest discover -s tests -v` 全部通过；
+4. 不存在第二个嵌套的同名 `excel-master/SKILL.md`；
+5. 文档不包含对外部项目目录的运行依赖。
+
+历史审计文件只用于追溯，不代表当前功能状态；当前行为以代码、测试和 `implementation-checklist.md` 为准。

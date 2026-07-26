@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 make_excel — 从 DataFrame 生成摩根士丹利标准格式的 Excel 报表。
 beautify — 对已有 Excel 文件只改格式不改数据（保留公式和值）。
@@ -17,6 +17,7 @@ beautify — 对已有 Excel 文件只改格式不改数据（保留公式和值
 """
 
 import argparse
+import filecmp
 import re
 import sys
 from datetime import datetime
@@ -103,7 +104,7 @@ THEMES = {
         'sum_fill': 'D6E4F0',
         'sum_font_bold': True,
         'sum_font_color': '000000',
-        'data_font_blue': '0000FF',
+        'data_font_blue': '163A5E',
         'data_font_black': '000000',
         'desc': '深海蓝表头，更沉稳专业',
     },
@@ -114,7 +115,7 @@ THEMES = {
         'sum_fill': 'E2EFDA',
         'sum_font_bold': True,
         'sum_font_color': '000000',
-        'data_font_blue': '0000FF',
+        'data_font_blue': '2A4219',
         'data_font_black': '000000',
         'desc': '墨绿表头，清爽自然',
     },
@@ -125,7 +126,7 @@ THEMES = {
         'sum_fill': 'D9D9D9',
         'sum_font_bold': True,
         'sum_font_color': '000000',
-        'data_font_blue': '0000FF',
+        'data_font_blue': '2D2D2D',
         'data_font_black': '000000',
         'desc': '深灰表头 + 蓝色色阶，现代极简',
     },
@@ -136,7 +137,7 @@ THEMES = {
         'sum_fill': 'FCE4D6',
         'sum_font_bold': True,
         'sum_font_color': '000000',
-        'data_font_blue': '0000FF',
+        'data_font_blue': '5B2C0A',
         'data_font_black': '000000',
         'desc': '酒红表头，暖色调高级感',
     },
@@ -147,9 +148,75 @@ THEMES = {
         'sum_fill': 'FDE8E8',
         'sum_font_bold': True,
         'sum_font_color': '000000',
-        'data_font_blue': '0000FF',
+        'data_font_blue': '8B2E2E',
         'data_font_black': '000000',
         'desc': '珊瑚红表头，活泼明亮',
+    },
+    'sakura': {
+        'label': '樱花粉',
+        'header_fill': 'D94F70',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'FDE8EE',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '8B2A3E',
+        'data_font_black': '000000',
+        'desc': '粉红表头，温柔不失活力',
+    },
+    'warm-sun': {
+        'label': '暖阳橙',
+        'header_fill': 'E8843A',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'FEF0E6',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '7B3F00',
+        'data_font_black': '000000',
+        'desc': '暖橙表头，阳光有能量',
+    },
+    'lavender': {
+        'label': '薰衣草紫',
+        'header_fill': '8B7EC8',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'EDEAF8',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '4A3F7A',
+        'data_font_black': '000000',
+        'desc': '淡紫表头，知性温婉',
+    },
+    'matcha': {
+        'label': '抹茶绿',
+        'header_fill': '7BA23F',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'F0F5E6',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '3D5A1E',
+        'data_font_black': '000000',
+        'desc': '抹茶绿表头，清新自然',
+    },
+    'peach': {
+        'label': '蜜桃',
+        'header_fill': 'E8897C',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'FEF0ED',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '8B3A2E',
+        'data_font_black': '000000',
+        'desc': '蜜桃粉表头，甜美不腻',
+    },
+    'misty': {
+        'label': '雾蓝紫',
+        'header_fill': '6B7FB5',
+        'header_font_color': 'FFFFFF',
+        'sum_fill': 'EDF0F8',
+        'sum_font_bold': True,
+        'sum_font_color': '000000',
+        'data_font_blue': '3D4A6B',
+        'data_font_black': '000000',
+        'desc': '雾蓝紫表头，现代感冷色调',
     },
 }
 
@@ -162,6 +229,26 @@ def _validate_theme(theme_name: str):
         raise ValueError(
             f"未知主题 '{theme_name}'。可用主题: {sorted(THEMES.keys())}"
         )
+
+
+def _validate_freeze_rows(freeze_rows: Optional[int]):
+    """校验冻结行数；None 表示自动，0 表示取消冻结。"""
+    if freeze_rows is None:
+        return
+    if isinstance(freeze_rows, bool) or not isinstance(freeze_rows, int) or freeze_rows < 0:
+        raise ValueError('freeze_rows 必须是大于等于 0 的整数或 None')
+
+
+def _backup_for_in_place_edit(source: Path) -> Path:
+    """把原文件复制到用户统一备份目录，并校验副本内容一致。"""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+    backup_dir = Path.home() / 'BackUp' / f'excel-master_{timestamp}'
+    backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_path = backup_dir / source.name
+    copy2(source, backup_path)
+    if not filecmp.cmp(source, backup_path, shallow=False):
+        raise OSError(f'备份校验失败: {backup_path}')
+    return backup_path
 
 
 def _build_theme_styles(theme_name: str):
@@ -209,9 +296,6 @@ def _infer_column_type(name: str, series: pd.Series) -> str:
         if pd.api.types.is_numeric_dtype(clean):
             sample = clean.head(20)
             if pd.api.types.is_float_dtype(sample):
-                # 0~1 之间的浮点 → 百分比
-                if (sample >= 0).all() and (sample <= 1).all() and sample.nunique() > 2:
-                    return 'pct'
                 return 'money'
             return 'number'
 
@@ -234,6 +318,21 @@ def _char_width(text: str) -> int:
     return sum(2 if ord(ch) > 127 else 1 for ch in str(text))
 
 
+def _cell_display_text(cell) -> str:
+    """安全取得单元格文本，避免公式对象的内存地址干扰列宽。"""
+    value = cell.value if hasattr(cell, 'value') else cell
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    formula_text = getattr(value, 'text', None)
+    if isinstance(formula_text, str):
+        return formula_text
+    if getattr(value, 't', None) == 'dataTable':
+        return ''
+    return str(value)
+
+
 def _estimate_column_width(header: str, series: pd.Series) -> int:
     """估算列宽：取表头和数据中最大字符宽度 + padding。"""
     max_w = _char_width(header)
@@ -251,14 +350,23 @@ def _estimate_column_width(header: str, series: pd.Series) -> int:
 # 格式引擎
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _apply_styles(ws, df: pd.DataFrame, theme: str = 'default', fmt_override: Optional[dict] = None):
+def _apply_styles(
+    ws,
+    df: pd.DataFrame,
+    theme: str = 'default',
+    fmt_override: Optional[dict] = None,
+    freeze_rows: Optional[int] = None,
+):
     """对已写入数据的工作表应用摩根系格式。
 
     fmt_override : dict, optional
         自定义数字格式，如 {'money': '#,##0.0', 'pct': '0.0%'}。
         合并到默认 FMT 之上，同名覆盖。
+    freeze_rows : int, optional
+        冻结行数。None 表示默认冻结首行，0 表示取消冻结。
     """
     s = _build_theme_styles(theme)
+    _validate_freeze_rows(freeze_rows)
     # 合并自定义数字格式
     effective_fmt = dict(FMT)
     if fmt_override:
@@ -377,7 +485,7 @@ def _apply_styles(ws, df: pd.DataFrame, theme: str = 'default', fmt_override: Op
 
     # 8. 网格线 + 冻结
     ws.sheet_view.showGridLines = False
-    ws.freeze_panes = 'A2'
+    ws.freeze_panes = None if freeze_rows == 0 else f'A{(freeze_rows or 1) + 1}'
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -397,8 +505,14 @@ def _write_data(ws, df: pd.DataFrame):
 # 主入口
 # ═══════════════════════════════════════════════════════════════════════════
 
-def make_excel(data, output_path: str, sheet_name: str = 'Sheet1', theme: str = 'default',
-               fmt_override: Optional[dict] = None) -> str:
+def make_excel(
+    data,
+    output_path: str,
+    sheet_name: str = 'Sheet1',
+    theme: str = 'default',
+    fmt_override: Optional[dict] = None,
+    freeze_rows: Optional[int] = None,
+) -> str:
     """生成摩根系标准格式 Excel。
 
     参数
@@ -414,30 +528,44 @@ def make_excel(data, output_path: str, sheet_name: str = 'Sheet1', theme: str = 
     fmt_override : dict, optional
         自定义数字格式，如 {'money': '#,##0.0', 'pct': '0.0%'}。
         合并到默认 FMT 之上，同名覆盖。
+    freeze_rows : int, optional
+        冻结行数。None 表示默认冻结首行，0 表示取消冻结。
 
     返回
     ----
     str : 输出文件的绝对路径。
     """
     _validate_theme(theme)
+    _validate_freeze_rows(freeze_rows)
 
     # 统一为多 sheet 格式
     if isinstance(data, pd.DataFrame):
         sheets = [(sheet_name, data)]
     else:
         sheets = list(data)
+    sheets = [
+        (name, df)
+        for name, df in sheets
+        if df is not None and not (hasattr(df, 'empty') and df.empty)
+    ]
+    if not sheets:
+        raise ValueError('数据至少包含一个非空 DataFrame')
 
     wb = Workbook()
     for name in list(wb.sheetnames):
         del wb[name]
 
     for idx, (name, df) in enumerate(sheets):
-        if df is None or (hasattr(df, 'empty') and df.empty):
-            continue
         safe_name = re.sub(r'[\\/*?:\[\]]', '_', str(name))[:31]
         ws = wb.create_sheet(title=safe_name, index=idx)
         _write_data(ws, df)
-        _apply_styles(ws, df, theme=theme, fmt_override=fmt_override)
+        _apply_styles(
+            ws,
+            df,
+            theme=theme,
+            fmt_override=fmt_override,
+            freeze_rows=freeze_rows,
+        )
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -524,13 +652,8 @@ def _infer_col_type_from_ws(header_value, samples):
         return 'date'
 
     if numeric_samples:
-        # 浮点检查百分比
         float_samples = [v for v in numeric_samples if isinstance(v, float)]
         if float_samples:
-            all_between_0_1 = all(0 < v < 1 for v in float_samples)
-            unique_gt_2 = len(set(float_samples)) > 2
-            if all_between_0_1 and unique_gt_2:
-                return 'pct'
             return 'money'
         return 'number'
 
@@ -543,12 +666,12 @@ def _infer_col_type_from_ws(header_value, samples):
 
 def _estimate_col_width_from_cells(ws, col, header_row, data_end):
     """从工作表的表头和单元格值估算列宽。"""
-    max_w = _char_width(str(ws.cell(row=header_row, column=col).value or ''))
+    max_w = _char_width(_cell_display_text(ws.cell(row=header_row, column=col)))
     for r in range(header_row + 1, data_end + 1):
-        v = ws.cell(row=r, column=col).value
-        if v is not None:
+        text = _cell_display_text(ws.cell(row=r, column=col))
+        if text:
             try:
-                w = _char_width(str(v))
+                w = _char_width(text)
                 if w > max_w:
                     max_w = w
             except Exception:
@@ -556,8 +679,25 @@ def _estimate_col_width_from_cells(ws, col, header_row, data_end):
     return max(MIN_COL_WIDTH, min(max_w + 2, MAX_COL_WIDTH))
 
 
-def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: str = 'default',
-                        fmt_override: Optional[dict] = None):
+def _adapt_conditional_formatting(ws, theme: str):
+    """只调整色阶最大色，保留数据条、图标集和其他规则。"""
+    from openpyxl.styles import Color
+
+    theme_color = THEMES[theme]['header_fill']
+    for conditional_formatting in ws.conditional_formatting:
+        for rule in conditional_formatting.rules:
+            if rule.type == 'colorScale' and rule.colorScale.color:
+                rule.colorScale.color[-1] = Color(rgb=theme_color)
+
+
+def _beautify_worksheet(
+    ws,
+    col_types_override: Optional[dict] = None,
+    theme: str = 'default',
+    fmt_override: Optional[dict] = None,
+    freeze_rows: Optional[int] = None,
+    adapt_conditional_formatting: bool = False,
+):
     """对单个工作表应用摩根系格式（不改变任何单元格的值）。
 
     参数
@@ -570,8 +710,13 @@ def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: st
     fmt_override : dict, optional
         自定义数字格式，如 {'money': '#,##0.0', 'pct': '0.0%'}。
         合并到默认 FMT 之上，同名覆盖。
+    freeze_rows : int, optional
+        冻结行数。None 表示冻结检测到的表头，0 表示取消冻结。
+    adapt_conditional_formatting : bool, default False
+        是否把已有色阶的最大色调整为当前主题色；其他规则保持不变。
     """
     s = _build_theme_styles(theme)
+    _validate_freeze_rows(freeze_rows)
     # 合并自定义数字格式
     effective_fmt = dict(FMT)
     if fmt_override:
@@ -598,10 +743,11 @@ def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: st
                 pass
     if a_has_data:
         ws.column_dimensions['A'].width = max(MIN_COL_WIDTH, min(a_max + 2, MAX_COL_WIDTH))
-        # A列表头 + 数据格式
-        ws.cell(row=header_row, column=1).font = s['header_font']
-        ws.cell(row=header_row, column=1).fill = s['header_fill']
-        ws.cell(row=header_row, column=1).alignment = HDR_ALIGN
+        # A1 为空时只保持数据可见，不给空白表头填色。
+        if ws.cell(row=header_row, column=1).value is not None:
+            ws.cell(row=header_row, column=1).font = s['header_font']
+            ws.cell(row=header_row, column=1).fill = s['header_fill']
+            ws.cell(row=header_row, column=1).alignment = HDR_ALIGN
         # A 列类型推断（与 B~K 列一致）
         a_header_val = ws.cell(row=header_row, column=1).value
         a_samples = _sample_ws_column(ws, 1, data_start, data_end)
@@ -615,8 +761,7 @@ def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: st
             if a_nf:
                 cell.number_format = a_nf
             if a_is_num:
-                val = cell.value
-                is_formula = (isinstance(val, str) and val.startswith('=')) or cell.data_type == 'f'
+                is_formula = _cell_display_text(cell).startswith('=') or cell.data_type == 'f'
                 if is_formula:
                     cell.font = s['data_font_black']
                 else:
@@ -666,8 +811,7 @@ def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: st
                 cell.number_format = nf
             # 所有单元格统一 Arial 11
             if is_num:
-                val = cell.value
-                is_formula = (isinstance(val, str) and val.startswith('=')) or cell.data_type == 'f'
+                is_formula = _cell_display_text(cell).startswith('=') or cell.data_type == 'f'
                 if is_formula:
                     cell.font = s['data_font_black']  # 公式=黑，不改公式值
                 else:
@@ -719,9 +863,16 @@ def _beautify_worksheet(ws, col_types_override: Optional[dict] = None, theme: st
     right_col = get_column_letter(last_data_col + 1)
     ws.column_dimensions[right_col].width = 3
 
+    if adapt_conditional_formatting:
+        _adapt_conditional_formatting(ws, theme)
+
     # 8. 网格线 + 冻结（表头在哪行就冻结在哪行下方）
     ws.sheet_view.showGridLines = False
-    ws.freeze_panes = f'A{header_row + 1}'
+    ws.freeze_panes = (
+        None
+        if freeze_rows == 0
+        else f'A{(freeze_rows if freeze_rows is not None else header_row) + 1}'
+    )
 
 
 def beautify(
@@ -732,6 +883,8 @@ def beautify(
     backup: bool = True,
     theme: str = 'default',
     fmt_override: Optional[dict] = None,
+    freeze_rows: Optional[int] = None,
+    adapt_conditional_formatting: bool = False,
 ) -> str:
     """美化已有 Excel 文件，只改格式不改数据（保留公式和值）。
 
@@ -745,18 +898,23 @@ def beautify(
         手动指定列类型，如 {'订单号': 'text', '金额': 'money'}。
         覆盖自动类型推断。可选值: money/number/pct/date/text。
     backup : bool, default True
-        原地覆盖前是否自动备份。备份文件名为 <原文件名>_backup_YYYYMMDD_HHMMSS.xlsx。
+        原地覆盖前是否自动备份到用户统一 BackUp 目录。
     theme : str
         色系主题名。可用: """ + AVAILABLE_THEMES + """。默认 'default'。
     fmt_override : dict, optional
         自定义数字格式，如 {'money': '#,##0.0', 'pct': '0.0%'}。
         合并到默认 FMT 之上，同名覆盖。
+    freeze_rows : int, optional
+        冻结行数。None 表示冻结检测到的表头，0 表示取消冻结。
+    adapt_conditional_formatting : bool, default False
+        是否把已有色阶的最大色调整为当前主题色；其他规则保持不变。
 
     返回
     ----
     str : 输出文件的绝对路径。
     """
     _validate_theme(theme)
+    _validate_freeze_rows(freeze_rows)
     from openpyxl import load_workbook
 
     out = output_path or input_path
@@ -764,15 +922,20 @@ def beautify(
     # 自动备份
     if backup and output_path is None:
         inp = Path(input_path)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-        bak = inp.with_stem(f'{inp.stem}_backup_{ts}')
-        copy2(input_path, str(bak))
+        bak = _backup_for_in_place_edit(inp)
         print(f'备份: {bak}')
 
     wb = load_workbook(input_path)  # data_only=False 默认，公式保留
 
     for ws in wb.worksheets:
-        _beautify_worksheet(ws, col_types_override=col_types, theme=theme, fmt_override=fmt_override)
+        _beautify_worksheet(
+            ws,
+            col_types_override=col_types,
+            theme=theme,
+            fmt_override=fmt_override,
+            freeze_rows=freeze_rows,
+            adapt_conditional_formatting=adapt_conditional_formatting,
+        )
 
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -790,10 +953,20 @@ def main():
                         help='美化已有 xlsx（只改格式不改数据，保留公式）')
     parser.add_argument('--theme', default='default', choices=list(THEMES.keys()),
                         help=f"色系主题 (default: default)。可选: {AVAILABLE_THEMES}")
+    parser.add_argument('--freeze-rows', type=int, default=None,
+                        help='冻结表头行数。默认自动推断，传 0 表示取消冻结')
+    parser.add_argument('--adapt-conditional-formatting', action='store_true',
+                        help='把已有色阶的最大色调整为当前主题色')
     args = parser.parse_args()
 
     if args.beautify:
-        path = beautify(args.input, args.output, theme=args.theme)
+        path = beautify(
+            args.input,
+            args.output,
+            theme=args.theme,
+            freeze_rows=args.freeze_rows,
+            adapt_conditional_formatting=args.adapt_conditional_formatting,
+        )
         print(f'已美化: {path}')
         return
 
@@ -802,7 +975,13 @@ def main():
         args.output = str(Path.home() / 'Desktop' / in_path.with_suffix('.xlsx').name)
 
     df = pd.read_csv(args.input)
-    path = make_excel(df, args.output, sheet_name=args.sheet_name, theme=args.theme)
+    path = make_excel(
+        df,
+        args.output,
+        sheet_name=args.sheet_name,
+        theme=args.theme,
+        freeze_rows=args.freeze_rows,
+    )
     print(f'已生成: {path}')
 
 
