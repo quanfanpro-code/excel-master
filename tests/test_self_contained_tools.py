@@ -57,6 +57,21 @@ class 自包含工具测试(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "重叠"):
             区块模块.format_worksheet_sections(工作表, 重叠区块)
 
+    def test_整表区块不逐行创建行高记录(self):
+        import format_excel_sections as 区块模块
+
+        工作表 = Workbook().active
+        工作表["B1"] = "金额"
+        for 行号 in range(2, 2002):
+            工作表.cell(行号, 2, 行号)
+        区块模块.format_worksheet_sections(
+            工作表,
+            [{"header_row": 1, "data_end_row": 2001, "start_col": 2, "end_col": 2}],
+        )
+        self.assertEqual(18, 工作表.sheet_format.defaultRowHeight)
+        self.assertEqual(0, len(工作表.row_dimensions))
+        self.assertEqual("medium", 工作表["B2001"].border.bottom.style)
+
 
 if __name__ == "__main__":
     unittest.main()

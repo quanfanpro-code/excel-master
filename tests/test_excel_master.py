@@ -169,6 +169,24 @@ class ExcelMaster核心测试(unittest.TestCase):
 
         self.assertEqual(原始值, [工作表["B2"].value, 工作表["B3"].value])
 
+    def test_大表美化不逐行创建行高记录(self):
+        工作表 = Workbook().active
+        工作表["B1"] = "金额"
+        for 行号 in range(2, 2002):
+            工作表.cell(行号, 2, 行号)
+        被测模块._beautify_worksheet(工作表)
+        self.assertEqual(被测模块.ROW_HEIGHT, 工作表.sheet_format.defaultRowHeight)
+        self.assertEqual(0, len(工作表.row_dimensions))
+        self.assertEqual("medium", 工作表["B2001"].border.bottom.style)
+
+    def test_稀疏表范围检测不填充空单元格(self):
+        工作表 = Workbook().active
+        工作表["B1"] = "金额"
+        工作表["B10000"] = 1
+        self.assertEqual(2, len(工作表._cells))
+        self.assertEqual(10000, 被测模块._detect_data_range(工作表)[2])
+        self.assertEqual(2, len(工作表._cells))
+
     def test_原地美化前备份到用户统一备份目录(self):
         with TemporaryDirectory() as 临时目录:
             临时根目录 = Path(临时目录)

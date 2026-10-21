@@ -341,6 +341,8 @@ def _estimate_column_width(header: str, series: pd.Series) -> int:
             w = _char_width(str(v))
             if w > max_w:
                 max_w = w
+            if max_w + 2 >= MAX_COL_WIDTH:
+                break
         except Exception:
             pass
     return max(MIN_COL_WIDTH, min(max_w + 2, MAX_COL_WIDTH))
@@ -374,11 +376,12 @@ def _apply_styles(
     nrows = 1 + len(df)   # 表头 + 数据行
     ncols = len(df.columns)
     start_col = 2         # B 列
+    text_font = Font(name='Arial', size=11)
 
     # 1. 行高 + A列宽 + A列格式（如果A列有数据）
-    for r in range(1, nrows + 1):
-        ws.row_dimensions[r].height = ROW_HEIGHT
-    a_has_data = any(ws.cell(row=r, column=1).value is not None for r in range(2, nrows + 1))
+    ws.sheet_format.defaultRowHeight = ROW_HEIGHT
+    a_has_data = any(cell.column == 1 and cell.row >= 2 and cell.value is not None
+                     for cell in ws._cells.values())
     if a_has_data:
         a_max = _char_width(str(ws.cell(row=1, column=1).value or ''))
         for r in range(2, nrows + 1):
@@ -392,6 +395,7 @@ def _apply_styles(
         ws.cell(row=1, column=1).font = s['header_font']
         ws.cell(row=1, column=1).fill = s['header_fill']
         ws.cell(row=1, column=1).alignment = HDR_ALIGN
+        ws.cell(row=1, column=1).border = TOP_BORDER
         # A 列类型推断（与 B~K 列一致）
         _a_col_name = str(df.columns[0]) if len(df.columns) > 0 else ''
         _a_col_type = _infer_column_type(_a_col_name, df.iloc[:, 0]) if len(df.columns) > 0 else 'unknown'
@@ -406,7 +410,8 @@ def _apply_styles(
             if _a_is_num:
                 cell.font = s['data_font_blue']
             else:
-                cell.font = Font(name='Arial', size=11)
+                cell.font = text_font
+            cell.border = BOTTOM_BORDER if r == nrows else MID_BORDER
     else:
         ws.column_dimensions['A'].width = A_COL_WIDTH
 
@@ -427,6 +432,7 @@ def _apply_styles(
         cell.font = s['header_font']
         cell.fill = s['header_fill']
         cell.alignment = HDR_ALIGN
+        cell.border = TOP_BORDER
 
     # 4. 数据行（统一 Arial 11 + 数字格式 + 对齐 + 字体颜色）
     for ci in range(ncols):
@@ -438,10 +444,11 @@ def _apply_styles(
         for ri in range(2, nrows + 1):
             cell = ws.cell(row=ri, column=ci + start_col)
             # 所有单元格统一 Arial 11
-            cell.font = s['data_font_blue'] if is_num else Font(name='Arial', size=11)
+            cell.font = s['data_font_blue'] if is_num else text_font
             cell.alignment = align
             if nf:
                 cell.number_format = nf
+            cell.border = BOTTOM_BORDER if ri == nrows else MID_BORDER
 
     # 5. 合计行检测与特殊格式（最后一行的首列含合计关键词）
     last_val = ws.cell(row=nrows, column=start_col).value
@@ -455,28 +462,6 @@ def _apply_styles(
             cell = ws.cell(row=nrows, column=ci + start_col)
             cell.font = s['sum_font']
             cell.fill = s['sum_fill']
-
-    # 6. 边框（无竖线，上下粗中间虚线）
-    for ci in range(ncols):
-        col = ci + start_col
-        for ri in range(1, nrows + 1):
-            cell = ws.cell(row=ri, column=col)
-            if ri == 1:
-                cell.border = TOP_BORDER
-            elif ri == nrows:
-                cell.border = BOTTOM_BORDER
-            else:
-                cell.border = MID_BORDER
-    # A列边框（如果有数据）
-    if a_has_data:
-        for ri in range(1, nrows + 1):
-            cell = ws.cell(row=ri, column=1)
-            if ri == 1:
-                cell.border = TOP_BORDER
-            elif ri == nrows:
-                cell.border = BOTTOM_BORDER
-            else:
-                cell.border = MID_BORDER
 
     # 7. 右侧空白列（宽 3）
     last_data_col = start_col + ncols - 1
@@ -578,27 +563,30 @@ def make_excel(
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _detect_data_range(ws):
-    """检测工作表的实际数据范围。返回 (header_row, data_start, data_end, col_end) 或 None。
+    """检测实际数据范围及 A 列是否有数据，空表返回 None。
 
     规则：从第1行开始找第一个非空行作为表头行；
     从表头行之后找最后一个非空行作为数据结束；
     跳过列A（索引列通常为空）。
     """
-    # 先确定最后一列 — 扫描所有行
+    # 只看已有单元格，避免 iter_rows 为稀疏大表补出大量空单元格。
     last_col = 0
     header_row = None
     last_data_row = 0
+    a_last_row = 0
 
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row or 1, max_col=ws.max_column or 1):
-        r = row[0].row
-        has_data = any(cell.value is not None for cell in row)
-        if has_data and header_row is None:
-            header_row = r
-        if has_data:
-            last_data_row = r
-        for cell in row:
-            if cell.value is not None and cell.column > last_col:
-                last_col = cell.column
+    for cell in ws._cells.values():
+        if cell.value is None:
+            continue
+        row, col = cell.row, cell.column
+        if header_row is None or row < header_row:
+            header_row = row
+        if row > last_data_row:
+            last_data_row = row
+        if col > last_col:
+            last_col = col
+        if col == 1 and row > a_last_row:
+            a_last_row = row
 
     if header_row is None:
         return None  # 空表
@@ -608,7 +596,7 @@ def _detect_data_range(ws):
     # 数据范围从 B 列（2）开始，跳过 A 列
     start_col = 2
     end_col = max(start_col, last_col)
-    return header_row, data_start, data_end, start_col, end_col
+    return header_row, data_start, data_end, start_col, end_col, a_last_row > header_row
 
 
 def _sample_ws_column(ws, col, start_row, end_row, max_samples=100):
@@ -664,21 +652,6 @@ def _infer_col_type_from_ws(header_value, samples):
     return 'unknown'
 
 
-def _estimate_col_width_from_cells(ws, col, header_row, data_end):
-    """从工作表的表头和单元格值估算列宽。"""
-    max_w = _char_width(_cell_display_text(ws.cell(row=header_row, column=col)))
-    for r in range(header_row + 1, data_end + 1):
-        text = _cell_display_text(ws.cell(row=r, column=col))
-        if text:
-            try:
-                w = _char_width(text)
-                if w > max_w:
-                    max_w = w
-            except Exception:
-                pass
-    return max(MIN_COL_WIDTH, min(max_w + 2, MAX_COL_WIDTH))
-
-
 def _adapt_conditional_formatting(ws, theme: str):
     """只调整色阶最大色，保留数据条、图标集和其他规则。"""
     from openpyxl.styles import Color
@@ -724,100 +697,62 @@ def _beautify_worksheet(
     dr = _detect_data_range(ws)
     if dr is None:
         return  # 空表跳过
-    header_row, data_start, data_end, start_col, end_col = dr
+    header_row, data_start, data_end, start_col, end_col, a_has_data = dr
 
-    # 1. 行高 + A列宽（采样A列数据估算宽度）
-    for r in range(header_row, data_end + 1):
-        ws.row_dimensions[r].height = ROW_HEIGHT
-    a_max = _char_width(str(ws.cell(row=header_row, column=1).value or ''))
-    a_has_data = False
-    for r in range(data_start, data_end + 1):
-        v = ws.cell(row=r, column=1).value
-        if v is not None:
-            a_has_data = True
-            try:
-                w = _char_width(str(v))
-                if w > a_max:
-                    a_max = w
-            except Exception:
-                pass
-    if a_has_data:
-        ws.column_dimensions['A'].width = max(MIN_COL_WIDTH, min(a_max + 2, MAX_COL_WIDTH))
-        # A1 为空时只保持数据可见，不给空白表头填色。
-        if ws.cell(row=header_row, column=1).value is not None:
-            ws.cell(row=header_row, column=1).font = s['header_font']
-            ws.cell(row=header_row, column=1).fill = s['header_fill']
-            ws.cell(row=header_row, column=1).alignment = HDR_ALIGN
-        # A 列类型推断（与 B~K 列一致）
-        a_header_val = ws.cell(row=header_row, column=1).value
-        a_samples = _sample_ws_column(ws, 1, data_start, data_end)
-        a_ct = _infer_col_type_from_ws(a_header_val, a_samples)
-        a_is_num = a_ct in ('money', 'number', 'pct')
-        a_align = RIGHT_ALIGN if a_is_num else LEFT_ALIGN
-        a_nf = effective_fmt.get(a_ct)
-        for r in range(data_start, data_end + 1):
-            cell = ws.cell(row=r, column=1)
-            cell.alignment = a_align
-            if a_nf:
-                cell.number_format = a_nf
-            if a_is_num:
-                is_formula = _cell_display_text(cell).startswith('=') or cell.data_type == 'f'
-                if is_formula:
-                    cell.font = s['data_font_black']
-                else:
-                    cell.font = s['data_font_blue']
-            else:
-                cell.font = Font(name='Arial', size=11)
-    else:
+    ws.sheet_format.defaultRowHeight = ROW_HEIGHT
+    for dimension in ws.row_dimensions.values():
+        if header_row <= dimension.index <= data_end:
+            dimension.height = ROW_HEIGHT
+    if not a_has_data:
         ws.column_dimensions['A'].width = A_COL_WIDTH
 
-    # 2. 列宽估算 + 类型推断（支持手动覆盖）
-    col_types = {}
-    col_headers = {}  # 列号 → 列名，用于 override 匹配
-    for c in range(start_col, end_col + 1):
-        col_letter = get_column_letter(c)
-        header_val = ws.cell(row=header_row, column=c).value
-        col_headers[c] = str(header_val) if header_val is not None else ''
-
-        # 手动覆盖优先
-        if col_types_override and col_headers[c] in col_types_override:
-            ct = col_types_override[col_headers[c]]
+    # 每列在同一轮内完成宽度、字体、数字格式和边框。
+    text_font = Font(name='Arial', size=11)
+    first_col = 1 if a_has_data else start_col
+    for c in range(first_col, end_col + 1):
+        header = ws.cell(row=header_row, column=c)
+        header_val = header.value
+        if c == 1:
+            ct = _infer_col_type_from_ws(header_val, _sample_ws_column(ws, c, data_start, data_end))
+            if header_val is not None:
+                header.font = s['header_font']
+                header.fill = s['header_fill']
+                header.alignment = HDR_ALIGN
+            max_width = _char_width(str(header_val or ''))
         else:
-            samples = _sample_ws_column(ws, c, data_start, data_end)
-            ct = _infer_col_type_from_ws(header_val, samples)
-        col_types[c] = ct
-
-        est = _estimate_col_width_from_cells(ws, c, header_row, data_end)
-        ws.column_dimensions[col_letter].width = est
-
-    # 3. 表头格式
-    for c in range(start_col, end_col + 1):
-        cell = ws.cell(row=header_row, column=c)
-        cell.font = s['header_font']
-        cell.fill = s['header_fill']
-        cell.alignment = HDR_ALIGN
-
-    # 4. 数据行格式（统一 Arial 11 + 对齐 + 数字格式 + 字体颜色）
-    for c in range(start_col, end_col + 1):
-        ct = col_types.get(c, 'unknown')
+            name = str(header_val) if header_val is not None else ''
+            ct = (col_types_override[name] if col_types_override and name in col_types_override
+                  else _infer_col_type_from_ws(header_val, _sample_ws_column(ws, c, data_start, data_end)))
+            header.font = s['header_font']
+            header.fill = s['header_fill']
+            header.alignment = HDR_ALIGN
+            max_width = _char_width(_cell_display_text(header))
+        header.border = TOP_BORDER
         is_num = ct in ('money', 'number', 'pct')
         align = RIGHT_ALIGN if is_num else LEFT_ALIGN
-        nf = effective_fmt.get(ct)
-
+        number_format = effective_fmt.get(ct)
         for r in range(data_start, data_end + 1):
             cell = ws.cell(row=r, column=c)
             cell.alignment = align
-            if nf:
-                cell.number_format = nf
-            # 所有单元格统一 Arial 11
+            if number_format:
+                cell.number_format = number_format
             if is_num:
-                is_formula = _cell_display_text(cell).startswith('=') or cell.data_type == 'f'
-                if is_formula:
-                    cell.font = s['data_font_black']  # 公式=黑，不改公式值
-                else:
-                    cell.font = s['data_font_blue']   # 手动输入=蓝
+                cell.font = (s['data_font_black']
+                             if cell.data_type == 'f' or _cell_display_text(cell).startswith('=')
+                             else s['data_font_blue'])
             else:
-                cell.font = Font(name='Arial', size=11)  # 文本=Arial 11
+                cell.font = text_font
+            cell.border = BOTTOM_BORDER if r == data_end else MID_BORDER
+            if max_width + 2 < MAX_COL_WIDTH and cell.value is not None:
+                try:
+                    width = _char_width(str(cell.value) if c == 1 else _cell_display_text(cell))
+                    if width > max_width:
+                        max_width = width
+                except Exception:
+                    pass
+        ws.column_dimensions[get_column_letter(c)].width = max(
+            MIN_COL_WIDTH, min(max_width + 2, MAX_COL_WIDTH)
+        )
 
     # 5. 合计行检测与特殊格式
     # 检测最后一行的首列（列A或第一数据列）是否含合计关键词
@@ -834,28 +769,6 @@ def _beautify_worksheet(
             cell = ws.cell(row=data_end, column=c)
             cell.font = s['sum_font']
             cell.fill = s['sum_fill']
-
-    # 6. 边框
-    data_rows = data_end - header_row + 1  # 表头 + 数据总行数
-    for c in range(start_col, end_col + 1):
-        for ri, r in enumerate(range(header_row, data_end + 1)):
-            cell = ws.cell(row=r, column=c)
-            if ri == 0:
-                cell.border = TOP_BORDER
-            elif ri == data_rows - 1:
-                cell.border = BOTTOM_BORDER
-            else:
-                cell.border = MID_BORDER
-    # A列边框（如果有数据）
-    if a_has_data:
-        for ri, r in enumerate(range(header_row, data_end + 1)):
-            cell = ws.cell(row=r, column=1)
-            if ri == 0:
-                cell.border = TOP_BORDER
-            elif ri == data_rows - 1:
-                cell.border = BOTTOM_BORDER
-            else:
-                cell.border = MID_BORDER
 
     # 7. 右侧空白列（宽 3）
     ncols = end_col - start_col + 1

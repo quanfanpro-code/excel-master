@@ -13,7 +13,9 @@ from make_excel import (
     FMT,
     HDR_ALIGN,
     LEFT_ALIGN,
+    MAX_COL_WIDTH,
     MID_BORDER,
+    MIN_COL_WIDTH,
     RIGHT_ALIGN,
     ROW_HEIGHT,
     SUM_KEYWORDS,
@@ -21,7 +23,7 @@ from make_excel import (
     _build_theme_styles,
     _backup_for_in_place_edit,
     _cell_display_text,
-    _estimate_col_width_from_cells,
+    _char_width,
     _infer_col_type_from_ws,
     _sample_ws_column,
     _validate_freeze_rows,
@@ -76,6 +78,7 @@ def format_worksheet_sections(
     styles = _build_theme_styles(theme)
     _validate_freeze_rows(freeze_rows)
     sections = _validate_sections(sections)
+    text_font = Font(name="Arial", size=11)
 
     for section in sections:
         header_row = section["header_row"]
@@ -83,14 +86,20 @@ def format_worksheet_sections(
         start_col = section["start_col"]
         end_col = section["end_col"]
 
-        for row in range(header_row, data_end_row + 1):
-            worksheet.row_dimensions[row].height = ROW_HEIGHT
+        if header_row == 1 and data_end_row >= worksheet.max_row:
+            worksheet.sheet_format.defaultRowHeight = ROW_HEIGHT
+            for dimension in worksheet.row_dimensions.values():
+                dimension.height = ROW_HEIGHT
+        else:
+            for row in range(header_row, data_end_row + 1):
+                worksheet.row_dimensions[row].height = ROW_HEIGHT
 
         for col in range(start_col, end_col + 1):
             header = worksheet.cell(header_row, col)
             header.font = styles["header_font"]
             header.fill = styles["header_fill"]
             header.alignment = HDR_ALIGN
+            header.border = TOP_BORDER
 
             samples = _sample_ws_column(
                 worksheet,
@@ -102,6 +111,7 @@ def format_worksheet_sections(
             numeric = column_type in ("money", "number", "pct")
             number_format = FMT.get(column_type)
             alignment = RIGHT_ALIGN if numeric else LEFT_ALIGN
+            max_width = _char_width(_cell_display_text(header))
             for row in range(header_row + 1, data_end_row + 1):
                 cell = worksheet.cell(row, col)
                 cell.alignment = alignment
@@ -118,15 +128,18 @@ def format_worksheet_sections(
                         else styles["data_font_blue"]
                     )
                 else:
-                    cell.font = Font(name="Arial", size=11)
+                    cell.font = text_font
+                cell.border = BOTTOM_BORDER if row == data_end_row else MID_BORDER
+                if max_width + 2 < MAX_COL_WIDTH and cell.value is not None:
+                    try:
+                        width = _char_width(_cell_display_text(cell))
+                        if width > max_width:
+                            max_width = width
+                    except Exception:
+                        pass
 
             column_letter = get_column_letter(col)
-            estimated = _estimate_col_width_from_cells(
-                worksheet,
-                col,
-                header_row,
-                data_end_row,
-            )
+            estimated = max(MIN_COL_WIDTH, min(max_width + 2, MAX_COL_WIDTH))
             worksheet.column_dimensions[column_letter].width = max(
                 worksheet.column_dimensions[column_letter].width or 0,
                 estimated,
@@ -147,17 +160,6 @@ def format_worksheet_sections(
                 cell = worksheet.cell(data_end_row, col)
                 cell.font = styles["sum_font"]
                 cell.fill = styles["sum_fill"]
-
-        for row in range(header_row, data_end_row + 1):
-            border = (
-                TOP_BORDER
-                if row == header_row
-                else BOTTOM_BORDER
-                if row == data_end_row
-                else MID_BORDER
-            )
-            for col in range(start_col, end_col + 1):
-                worksheet.cell(row, col).border = border
 
     worksheet.sheet_view.showGridLines = False
     if freeze_rows is not None:
